@@ -1,266 +1,155 @@
-#include <assert.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include "demo.h"
 
-// run with: gcc -Wall --std=c99 -pedantic demo.c test.c  -Wimplicit-fallthrough  -o demo && ./demo
+#include "word.h"
+#include "dict.h"
 
+const char INPUT_FILE_NAME[] = "chlopi-processed.txt";
+const size_t BUF_SIZE = 1024;
 
-typedef struct llist_entry {
-    llist_item_type item;
-    struct llist_entry *prev;
-    struct llist_entry *next;
-} llist_entry;
+int main(void) {
+    int result = 1;
+    FILE* soubor = NULL;
+    word* current_word = NULL;
+    word* wanted_key = NULL;
+    dict_iterator *iterator = NULL;
+    char buffer[BUF_SIZE + 1];
 
-struct llist_type {
-    struct llist_entry *head;
-    struct llist_entry *tail;
-    ssize_t count;
-};
-
-
-llist_type *llist_new(void)
-{
-    llist_type *list = malloc(sizeof(llist_type));
-    if (list == NULL) {
-        return NULL;
-    }
-    list->head = NULL;
-    list->tail = NULL;
-    list->count = 0;
-    llist_check(list);
-    return list;
-}
-
-int llist_push(llist_type *list, llist_item_type item)
-{
-    llist_entry *new_entry = malloc(sizeof(llist_entry));
-    if (new_entry == NULL) {
-        return -1;
-    }
-    // new_entry is a pointer, so assigning must be with ->, not .
-    new_entry->item = item;
-    new_entry->prev = list->head; // `NULL` if adding the first element
-    new_entry->next = NULL;
-
-    if (list->head == NULL) {
-        list->tail = new_entry; // tail is set only with the 1st entry
-    } else {
-        // the previous next was NULL, update it to the current entry
-        new_entry->prev->next = new_entry;
-    }
-    // list->head must be set to the latest object in the llist
-    list->head = new_entry;
-    list->count++;
-    llist_check(list);
-    return 0;
-}
-
-int llist_pop(llist_type *list, llist_item_type *result)
-{
-    // end of the list, no more entries to pop
-    if (list->head == NULL) {
-        *result = 0;
-        return -1;
-    }
-    llist_entry *current_entry = list->head;
-    *result = current_entry->item;
-    list->head = current_entry->prev;
-    // if I popped the last element, there's no next at all
-    // LLM-aided (dereference list->head after reassigning the value)
-    if (list->head) {
-        // update the current last element of the list - there's no next after it
-        list->head->next = NULL;
-    } else {
-        list->tail = NULL;
-    }
-    free(current_entry);
-    list->count--;
-    llist_check(list);
-    return 0;
-}
-
-int llist_popleft(llist_type *list, llist_item_type *result)
-{
-    // end of the list, no more entries to pop
-    if (list->tail == NULL) {
-        *result = 0;
-        return -1;
+    dict *words = dict_alloc();
+    if (!words) {
+        fprintf(stderr, "could not allocate dict\n");
+        goto finally;
     }
 
-    llist_entry *current_entry = list->tail;
-    *result = current_entry->item;
-    list->tail = current_entry->next;
-    // if I popped the last element, there's no next at all
-    if (list->tail) {
-        // update the current last element of the list - there's no next after it
-        list->tail->prev = NULL;
-    }
-    free(current_entry);
-    list->count--;
-    llist_check(list);
-    return 0;
-}
-
-void llist_free(llist_type *list)
-{
-    llist_item_type ignored_result;
-    while (list->head) {
-        int result = llist_pop(list, &ignored_result);
-        assert(result == 0);
-    }
-    free(list);
-}
-
-int llist_dump(llist_type *list)
-{
-    if (list->head == NULL) {
-        return -1;
-    }
-    // from head to tail
-    llist_entry *current = list->head;
-    while (current) {
-        printf("%d\n", current->item);
-        current = current->prev;
-    }
-    printf("and now the other way around:\n");
-    // from tail to head
-    current = list->tail;
-    while (current) {
-        printf("%d\n", current->item);
-        current = current->next;
+    soubor = fopen(INPUT_FILE_NAME, "r");
+    if (!soubor) {
+        fprintf(stderr, "could not open file %s\n", INPUT_FILE_NAME);
+        goto finally;
     }
 
-    return 0;
-}
-
-void llist_check(llist_type *list) {
-    if (list->head == NULL) {
-        assert(list->tail == NULL);
-        assert(list->count == 0);
+    size_t read_count;
+    current_word = word_alloc();
+    if (!current_word) {
+        fprintf(stderr, "could not allocate memory\n");
+        goto finally;
     }
-    printf("[Head (%p) to tail (%p):\n", (void*)list->head, (void*)list->tail);
-    // from head to tail
-    ssize_t cnt_from_head = 0;
-    for (llist_entry *current = list->head; current; current = current->prev) {
-        printf("  - %d: %p next:%p prev:%p\n", current->item, (void*)current,
-               (void*)current->next, (void*)current->prev);
-        if (current->prev) {
-            assert(current->prev->next == current);
-        } else {
-            assert(current == list->tail);
-        }
-        cnt_from_head++;
-    }
-    printf("]\n");
-    // the other way around
-    printf("[Tail (%p) to head (%p):\n", (void*)list->tail, (void*)list->head);
-    ssize_t cnt_from_tail = 0;
-    for (llist_entry *current = list->tail; current; current = current->next) {
-        printf("  - %d: %p next:%p prev:%p\n", current->item, (void*)current,
-               (void*)current->next, (void*)current->prev);
-        if (current->next) {
-            assert(current->next->prev == current);
-        } else {
-            assert(current == list->head);
-        }
-        cnt_from_tail++;
-    }
-    printf("]\n");
-    assert(cnt_from_head == cnt_from_tail);
-    assert(cnt_from_head == list->count);
-}
+    while ((read_count = fread(buffer, 1, BUF_SIZE, soubor))) {
+        printf("Nacetl jsem %zd bajtu\n", read_count);
+        buffer[read_count] = 0;
+        for (size_t i = 0; i < read_count; i++) {
+            char c = buffer[i];
+            if ((c == ' ') || (c == '\n')) {
+                if (!word_size(current_word)) {
+                    char *data = word_get_data(current_word);
+                    if (!data) {
+                        fprintf(stderr, "could not get word data\n");
+                        goto finally;
+                    }
+                    printf("slovo: %s\n", data);
 
-ssize_t llist_count(llist_type *list)
-{
-    return list->count;
-}
+                    int count;
+                    int result = dict_get(words, current_word, &count);
+                    if (result < 0) {
+                        fprintf(stderr, "could not get value from dict\n");
+                        goto finally;
+                    } else if (result == 0) {
+                        count = 0;
+                    }
 
-int llist_get(llist_type *list, ssize_t n, llist_item_type *result) {
-    for (llist_entry *current = list->head; current; current = current->prev) {
-        if (n-- == 0) {
-            *result = current->item;
-            return 0;
-        }
-    }
-    // we iterated till the end and haven't found the nth element
-    *result = 0;
-    return -1;
-}
+                    result = dict_set(words, current_word, count +1);
+                    current_word = NULL;
+                    if (result < 0) {
+                        fprintf(stderr, "could not set value in dict\n");
+                        goto finally;
+                    }
 
-ssize_t llist_remove_first_n(llist_type *list, ssize_t n)
-{
-    llist_item_type ignored_result;
-
-    for (ssize_t n_popped_items = 0; n_popped_items < n;n_popped_items++) {
-        if (list->head == NULL) {
-            llist_check(list);
-            return n_popped_items;
-        }
-        if (llist_pop(list, &ignored_result) == -1) {
-            llist_check(list);
-            return -1;
-        }
-    }
-    llist_check(list);
-    return n;
-}
-
-int llist_remove(llist_type *list, ssize_t n, llist_item_type *result)
-{
-    if (n == 0) {
-        return llist_pop(list, result);
-    }
-    if (n == (list->count)-1) {
-        return llist_popleft(list, result);
-    }
-
-    for (llist_entry *current = list->head; current; current = current->prev) {
-        // stopping one item before the one I want to remove
-        if (n-- == 1) {
-            if (current->prev == NULL) {
-                *result = 0;
-                return -1;
+                    current_word = word_alloc();
+                    if (!current_word) {
+                        fprintf(stderr, "could not allocate memory\n");
+                        goto finally;
+                    }
             }
-            llist_entry *entry_to_delete = current->prev;
-            *result = entry_to_delete->item;
-            current->prev = entry_to_delete->prev;
-            entry_to_delete->prev->next = current;
-            free(entry_to_delete);
-            list->count--;
-            llist_check(list);
-            return 0;
+            } else {
+                if (word_add_char(current_word, c) < 0) {
+                    fprintf(stderr, "could not add character to word\n");
+                    goto finally;
+                }
+            }
         }
     }
-    *result = 0;
-    return -1;
 
-// *ptr_to_update points to the current entry
-// ptr_to_update is the pointer which we need to update if we remove that entry
+    if (!word_size(current_word)) {
+        char *data = word_get_data(current_word);
+        if (!data) {
+            fprintf(stderr, "could not get word data\n");
+            goto finally;
+        }
+        printf("slovo: %s\n", data);
+    }
 
-    // for (
-    //     llist_entry **ptr_to_update = &list->head;
-    //      *ptr_to_update != (llist_entry *)NULL;
-    //      ptr_to_update = &((*ptr_to_update)->prev)
-    // ) {
-    //     if (n-- == 0) {
-    //         llist_entry *entry_to_delete = *ptr_to_update;
-    //         *result = entry_to_delete->item;
-            
-    //         // sth along the lines? segfaults :(
-    //         if (entry_to_delete->prev != NULL) {
-    //             entry_to_delete->prev->next = entry_to_delete->next;
-    //         }
-    //         if (entry_to_delete->next != NULL) {
-    //             entry_to_delete->next->prev = entry_to_delete->prev;
-    //         }
+    word_free(current_word);
+    current_word = NULL;
 
-    //         *ptr_to_update = entry_to_delete->prev;
-    //         free(entry_to_delete);
-    //         list->count--;
-    //         llist_check(list);
-    //         return 0;
-    //     }
-    // }
+    int count;
+    wanted_key = word_alloc();
+    if (!wanted_key) {
+        fprintf(stderr, "could not allocate wanted_key\n");
+        goto finally;
+    }
 
+    for (char *ptr="boryna"; *ptr; ptr++) {
+        if (word_add_char(wanted_key, *ptr) < 0) {
+            fprintf(stderr, "could not add letter to wanted key\n");
+            goto finally;
+        }
+    }
+    if (dict_get(words, wanted_key, &count) < 0) {
+        fprintf(stderr, "could not get value from dict\n");
+        goto finally;
+    }
+    printf("value: %d\n", count);
+
+    iterator = dict_iterator_new(words);
+    if (!iterator) {
+        fprintf(stderr, "could not iterate dict\n");
+        goto finally;
+    }
+
+    int iteration_result;
+    word *the_word;
+    while ((iteration_result = dict_iterator_next(iterator, &the_word)) == 1) {
+        int value;
+        if (dict_get(words, the_word, &value) < 0) {
+            fprintf(stderr, "could not get value from dict\n");
+            goto finally;
+        }
+        char *data = word_get_data(the_word);
+        if (!data) {
+            fprintf(stderr, "could not get word data\n");
+            goto finally;
+        }
+        printf("%s: %d\n", data, value);
+    }
+    if (iteration_result < 1) {
+        fprintf(stderr, "could not iterate dict\n");
+        goto finally;
+    }
+
+    result = 0;
+finally:
+    if (soubor) {
+        fclose(soubor);
+    }
+    if (current_word) {
+        word_free(current_word);
+    }
+    if (wanted_key) {
+        word_free(wanted_key);
+    }
+    if (words) {
+        dict_free(words);
+    }
+    if (iterator) {
+        dict_iterator_free(iterator);
+    }
+    return result;
 }

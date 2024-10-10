@@ -13,8 +13,8 @@ typedef struct llist_entry {
 } llist_entry;
 
 struct llist_type {
-    struct llist_entry base;
     ssize_t count;
+    llist_entry base;
 };
 
 
@@ -28,6 +28,7 @@ llist_type *llist_new(void)
     list->base.prev = &(list->base);
     list->base.next = &(list->base);
     list->count = 0;
+    llist_check(list);
     return list;
 }
 
@@ -45,6 +46,7 @@ int llist_push(llist_type *list, llist_item_type item)
     list->base.prev = new_entry;
 
     list->count++;
+    llist_check(list);
     return 0;
 }
 
@@ -63,6 +65,7 @@ int llist_pop(llist_type *list, llist_item_type *result)
     list->base.prev->next = &(list->base);
     free(last_entry);
     list->count--;
+    llist_check(list);
     return 0;
 }
 
@@ -81,14 +84,83 @@ ssize_t llist_count(llist_type *list)
     return list->count;
 }
 
-// int llist_get(llist_type *list, ssize_t n, llist_item_type *result) {
-//     for (llist_entry *current = list->base.next; current; current = current->prev) {
-//         if (n-- == 0) {
-//             *result = current->item;
-//             return 0;
-//         }
-//     }
-//     // we iterated till the end and haven't found the nth element
-//     *result = 0;
-//     return -1;
-// }
+int llist_get(llist_type *list, ssize_t n, llist_item_type *result) {
+    for (llist_entry *current = list->base.prev; current != &(list->base); current = current->prev) {
+        if (n-- == 0) {
+            *result = current->item;
+            return 0;
+        }
+    }
+    // we iterated till the end and haven't found the nth element
+    *result = 0;
+    return -1;
+}
+
+void entry_check(llist_entry *entry)
+{
+    assert(entry->next->prev = entry);
+    assert(entry->prev->next = entry);
+}
+
+
+void llist_check(llist_type *list) {
+    ssize_t count = 0;
+    llist_entry *base = &(list->base);
+    
+    entry_check(base);
+    for (llist_entry *current = base; current->next != base; current = current->next) {
+        count++;
+        entry_check(current);
+    }
+    assert(list->count == count);
+    for (llist_entry *current = base; current->prev != base; current = current->prev) {
+        count--;
+        entry_check(current);
+    }
+    assert(count == 0);
+}
+
+int llist_dump(llist_type *list)
+{
+
+    for (llist_entry *current = list->base.prev; current != &(list->base); current = current->prev) {
+        printf("%d\n", current->item);
+    }
+    return 0;
+}
+
+ssize_t llist_remove_first_n(llist_type *list, ssize_t n)
+{
+    llist_item_type ignored_result;
+
+    for (ssize_t n_popped_items = 0; n_popped_items < n;n_popped_items++) {
+        if (list->head == NULL) {
+            llist_check(list);
+            return n_popped_items;
+        }
+        if (llist_pop(list, &ignored_result) == -1) {
+            llist_check(list);
+            return -1;
+        }
+    }
+    llist_check(list);
+    return n;
+}
+
+
+int llist_remove(llist_type *list, ssize_t n, llist_item_type *result)
+{
+    for (llist_entry *current = base; current->prev != base; current = current->next) {
+        if (n-- == 0) {
+            *result = current->item;
+            current->prev->next = current->next;
+            current->next->prev = current->prev;
+            free(current);
+            list->count--;
+            llist_check(list);
+            return 0;
+    }
+
+    *result = 0;
+    return -1;
+}

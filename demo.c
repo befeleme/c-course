@@ -129,7 +129,7 @@ int main(void) {
         }
         printf("%s: %d\n", data, value);
     }
-    if (iteration_result < 1) {
+    if (iteration_result < 0) {
         fprintf(stderr, "could not iterate dict\n");
         goto finally;
     }

@@ -74,3 +74,41 @@ char *word_get_data(word *w) {
 size_t word_size(word *w) {
     return !(w->size);
 }
+
+
+int word_equal(word *a, word *b) {
+    int result;
+    char *a_data = word_get_data(a);
+    if (!a_data) {
+        result = -1;
+        goto finally;
+    }
+    char *b_data = word_get_data(b);
+    if (!b_data) {
+        result = -1;
+        goto finally;
+
+    }
+    if (strcmp(a_data, b_data) == 0) {
+        result = 1;
+    } else {
+        result = 0;
+    }
+
+finally:
+    return result;
+}
+
+word *word_from_string(char *contents) {
+    word *new_word = word_alloc();
+    if (!new_word) {
+        return NULL;
+    }
+
+    for (contents; *contents; contents++) {
+        if (word_add_char(new_word, *contents) < 0) {
+            return NULL;
+        }
+    }
+    return new_word;
+}

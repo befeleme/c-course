@@ -20,26 +20,36 @@ struct dict_iterator {
 
 dict *dict_alloc(void)
 {
-    dict *result = malloc(sizeof(dict));
-    if (!result) {
+    dict *d = malloc(sizeof(dict));
+    if (!d) {
         return NULL;
     }
-    result->count = 0;
-    return result;
+    d->count = 0;
+
+    // d->contents = malloc(sizeof(dict_entry *) * INITIAL_SIZE);
+    // if (!d->contents) {
+    //     free(d);
+    //     return NULL;
+    // }
+    // d->contents_size = INITIAL_SIZE;
+    // d->num_entries = 0;
+
+    return d;
 }
 
 void dict_free(dict *d) {
+    // free(d->contents);
     free(d);
 }
 
 int dict_set(dict *d, dict_key key, dict_value value) {
     int result = -1;
-    char *key_data = word_get_data(key);
-    if (!key_data) {
+
+    word *single_key_word = word_from_string(SINGLE_KEY);
+    if (!single_key_word) {
         goto finally;
     }
-
-    if (strcmp(key_data, SINGLE_KEY) == 0) {
+    if (word_equal(key, single_key_word) > 0) {
         d->count = value;
     }
     result = 0;
@@ -50,12 +60,13 @@ finally:
 
 int dict_get(dict *d, dict_key key, dict_value *value) {
     int result = -1;
-    char *key_data = word_get_data(key);
-    if (!key_data) {
-        *value = -1;
+
+    word *single_key_word = word_from_string(SINGLE_KEY);
+    if (!single_key_word) {
         goto finally;
     }
-    if (strcmp(key_data, SINGLE_KEY) == 0) {
+
+    if (word_equal(key, single_key_word) > 0) {
         *value = d->count;
         result = 1;  // found
     } else {

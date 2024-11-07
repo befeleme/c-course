@@ -5,10 +5,24 @@
 #include "dict.h"
 #include "word.h"
 
+typedef word_hash_type dict_hash_type;
+
 const char SINGLE_KEY[] = "boryna";
 const char DUMMY_KEY[] = "jagna";
 
+const size_t INITIAL_SIZE = 8;
+
+typedef struct dict_entry {
+    dict_key key;
+    dict_value value;
+    struct dict_entry *next;
+} dict_entry;
+
 struct dict {
+    dict_entry **contents;
+    size_t contents_size;  // total available size
+    size_t num_entries;  // how many entries are there
+    // delete this:
     dict_value count;
 };
 
@@ -26,55 +40,92 @@ dict *dict_alloc(void)
     }
     d->count = 0;
 
-    // d->contents = malloc(sizeof(dict_entry *) * INITIAL_SIZE);
-    // if (!d->contents) {
-    //     free(d);
-    //     return NULL;
-    // }
-    // d->contents_size = INITIAL_SIZE;
-    // d->num_entries = 0;
+    d->contents = malloc(sizeof(dict_entry *) * INITIAL_SIZE);
+    if (!d->contents) {
+        free(d);
+        return NULL;
+    }
+    d->contents_size = INITIAL_SIZE;
+    d->num_entries = 0;
 
     return d;
 }
 
 void dict_free(dict *d) {
-    // free(d->contents);
+    for (size_t i = 0; i < d->contents_size; i++) {
+        dict_entry *current_entry = d->contents[i];
+        while (current_entry) {
+            dict_entry *entry = current_entry;
+            current_entry = current_entry->next;
+            word_free(entry->key);
+            free(entry);
+        }
+    }
+    free(d->contents);
     free(d);
 }
 
 int dict_set(dict *d, dict_key key, dict_value value) {
-    int result = -1;
+    dict_hash_type hash = word_hash(key);
+    if (hash == -1) {
+        word_free(key);
+        return -1;
+    }
+    size_t bucket = hash % d->contents_size;
 
-    word *single_key_word = word_from_string(SINGLE_KEY);
-    if (!single_key_word) {
-        goto finally;
+    dict_entry **pointer_to_current_entry = &(d->contents[bucket]);
+
+    while (*pointer_to_current_entry) {
+        dict_entry *current_entry = *pointer_to_current_entry;
+        int result = word_equal(current_entry->key, key);
+        if (result == -1) {
+            word_free(key);
+            return -1;
+        } else if (result == 1) {
+            current_entry->value = value;
+            word_free(key);
+            return 0;
+        }
+        pointer_to_current_entry = &(current_entry->next);
     }
-    if (word_equal(key, single_key_word) > 0) {
-        d->count = value;
+
+    // we need to add a new entry if we get here
+    dict_entry *new_entry = malloc(sizeof(dict_entry));
+    if (new_entry == NULL) {
+        word_free(key);
+        return -1;
     }
-    result = 0;
-finally:
-    word_free(key);
-    return result;
+    new_entry->key = key;
+    new_entry->value = value;
+    new_entry->next = NULL;
+    *pointer_to_current_entry = new_entry;
+    d->num_entries++;
+    return 0;
 }
 
 int dict_get(dict *d, dict_key key, dict_value *value) {
-    int result = -1;
+    *value = 0;
 
-    word *single_key_word = word_from_string(SINGLE_KEY);
-    if (!single_key_word) {
-        goto finally;
+    dict_hash_type hash = word_hash(key);
+    if (hash == -1) {
+        return -1;
     }
+    size_t bucket = hash % d->contents_size;
 
-    if (word_equal(key, single_key_word) > 0) {
-        *value = d->count;
-        result = 1;  // found
-    } else {
-        *value = -1;
-        result = 0; // not found
+    dict_entry *current_entry = d->contents[bucket];
+    while (current_entry) {
+        int result = word_equal(current_entry->key, key);
+        if (result == -1) {
+            return -1;
+        }
+        else if (result == 1) {
+            *value = current_entry->value;
+            return 1;
+        }
+        current_entry = current_entry->next;
     }
-finally:
-    return result;
+    // If I'm here, I'm at the end of the bucket - not found
+    return 0;
 }
 
 dict_iterator *dict_iterator_new(dict *d) {

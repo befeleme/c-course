@@ -100,6 +100,7 @@ finally:
 }
 
 word *word_from_string(char *contents) {
+
     word *new_word = word_alloc();
     if (!new_word) {
         return NULL;
@@ -107,8 +108,17 @@ word *word_from_string(char *contents) {
 
     for (contents; *contents; contents++) {
         if (word_add_char(new_word, *contents) < 0) {
+            word_free(new_word);
             return NULL;
         }
     }
     return new_word;
+}
+
+word_hash_type word_hash(word *w) {
+    char *data = word_get_data(w);
+        if (!data) {
+            return -1;
+        }
+    return data[0];
 }
